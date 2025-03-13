@@ -5,6 +5,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import pipeline
 import uvicorn
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
 
 app = FastAPI()
 
@@ -42,6 +45,49 @@ def process_notes(input_data: NotesInput):
     summary = summarize_notes(input_data.doctor_notes, input_data.nurse_notes)
     similar_cases = find_similar_cases(summary)
     return {"summary": summary, "similar_cases": similar_cases}
+
+
+
+
+
+# 🔹 Load & Prepare Data for Model Evaluation
+def prepare_evaluation_data():
+    # Convert text features to numerical representations
+    vectorizer = TfidfVectorizer(stop_words="english")
+    X = vectorizer.fit_transform(examinations_df["full_text"])  
+    y = examinations_df["diagnosis"]  # Assuming 'diagnosis' is the label
+
+    # Split data into training & test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train a simple classification model (Naive Bayes)
+    model = MultinomialNB()
+    model.fit(X_train, y_train)
+
+    # Predict on test data
+    y_pred = model.predict(X_test)
+
+    return y_test, y_pred
+
+# 🔹 Compute Evaluation Metrics
+def evaluate_model():
+    y_test, y_pred = prepare_evaluation_data()
+
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted')  # Weighted for multi-class
+    recall = recall_score(y_test, y_pred, average='weighted')
+
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall
+    }
+
+# 🔹 API to Run Model Evaluation (Only in Jupyter Notebook)
+@app.get("/evaluate_model")
+def get_model_evaluation():
+    metrics = evaluate_model()
+    return {"evaluation": metrics}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8899)
